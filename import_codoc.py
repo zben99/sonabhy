@@ -9,7 +9,7 @@ DB_CONFIG = {
     "dbname": "maarchRM",
     "user": "maarch",
     "password": "maarch",  # À adapter
-    "host": "192.168.1.69",
+    "host": "192.168.71.69",
     "port": "5432"
 }
 
@@ -65,15 +65,15 @@ with open("codoc_propre.csv", encoding="utf-8") as csvfile:
 
         sql = f"""
 INSERT INTO "recordsManagement"."archive" (
-    "archiveId", "archiveName", "description", "text",
-    "descriptionClass", "originatorOrgRegNumber", "originatorOwnerOrgId", "originatorOwnerOrgRegNumber",
-    "archiverOrgRegNumber", "archivalProfileReference", "serviceLevelReference",
+    "archiveId", "originatorArchiveId", "archiveName", "description", "text",
+    "descriptionClass", "originatorOrgRegNumber", "originatorOwnerOrgRegNumber",
+     "serviceLevelReference",
     "retentionRuleCode", "retentionDuration", "finalDisposition",
     "depositDate", "status", "fullTextIndexation"
 ) VALUES (
-    '{archive_id}', '{titre}', '{metadata_str}', '{text_content}',
-    'CJ', 'JURRR', 'maarchRM_stdoha-d3ic-osx14l', 'JURRR',
-    'maarchRM_stdoha-d3ic-osx14l', 'DOSIP', 'serviceLevel_002',
+    '{archive_id}', '{code}','{titre}', '{metadata_str}', '{text_content}',
+    'CJ', 'JURRR',  'JURRR',
+     'serviceLevel_002',
     '{retention_rule}', '{duration}', '{disposition}',
     '{now}', 'preserved', 'none'
 );

@@ -1,116 +1,124 @@
+#!/usr/bin/env python3
+# coding: utf-8
+# ---------------------------------------------------------------------------
+#  Import CSV → Maarch RM (DADFI1 à DADFI4)
+#  Auteur : Hamiral Redmond
+#  Date   : 23 mai 2025
+# ---------------------------------------------------------------------------
 import csv
 import uuid
-from datetime import datetime
-import psycopg2
 import json
+import psycopg2
+from datetime import datetime
 
-# --- Configuration PostgreSQL ---
+# --- Connexion PostgreSQL --------------------------------------------------
 DB_CONFIG = {
-    "dbname": "maarchRM",
-    "user": "maarch",
-    "password": "maarch",      # À adapter
-    "host": "192.168.1.69",    # À adapter
-    "port": "5432"
+    "dbname":   "maarchRM",
+    "user":     "maarch",
+    "password": "maarch",          # ← adapte
+    "host":     "192.168.71.69",   # ← adapte
+    "port":     "5432",
 }
 
-# --- Définition des sources CSV ---
-# fichier      : nom du CSV
-# key_field    : colonne à utiliser pour archiveName
-# metadata     : colonnes à stocker en JSON + pour full-text
-# desc_class   : descriptionClass pour ce type
+# --- Définition des sources CSV -------------------------------------------
 CSV_SOURCES = [
-    {
-        "fichier": "dadfi1_propre.csv",
-        "key_field": "Référence",
-        "metadata": ["Titre/Dossier", "N° Pièces", "Date", "Observations"],
-        "desc_class": "DADFI1"
-    },
-    {
-        "fichier": "dadfi2_propre.csv",
-        "key_field": "Code",
-        "metadata": [
-            "Titre_dossier", "CONTENU", "Analyse_diplomatique",
-            "DATE", "Numeros_pieces", "OBSERVATIONS",
-            "Passage_GED", "Base_GED", "Sort_final"
-        ],
-        "desc_class": "DADFI2"
-    },
-    {
-        "fichier": "dadfi3_propre.csv",
-        "key_field": "Code",
-        "metadata": [
-            "TITRE/DOSSIER", "CONTENU", "N° PIECES", "DATE",
-            "OBSERVATIONS", "SORT FINAL", "ANA. DIPLOM.",
-            "PASSAGE GED", "BASE GED"
-        ],
-        "desc_class": "DADFI3"
-    },
-    {
-        "fichier": "dadfi4_propre.csv",
-        "key_field": "Cote",
-        "metadata": [
-            "Intitulé", "Période début", "Type", "Quantité",
-            "Fonction", "Code fonction", "Mots-clés",
-            "Types de documents", "Date ouverture",
-            "Date clôture", "Système", "Durée conservation",
-            "Sort final", "Période fin", "Observations"
-        ],
-        "desc_class": "DADFI4"
-    }
+    # dadfi1
+    {"fichier": "dadfi1_propre.csv",
+     "key_field":   "Référence",         # → originatorArchiveId
+     "title_field": "Titre/Dossier",     # → archiveName
+     "metadata":   ["Titre/Dossier", "N° Pièces", "Date", "Observations"],
+     "desc_class": "DADFI1"},
+
+    # dadfi2
+    {"fichier": "dadfi2_propre.csv",
+     "key_field":   "Code",
+     "title_field": "Titre_dossier",
+     "metadata":   ["Titre_dossier", "CONTENU", "Analyse_diplomatique",
+                    "DATE", "Numeros_pieces", "OBSERVATIONS",
+                    "Passage_GED", "Base_GED", "Sort_final"],
+     "desc_class": "DADFI2"},
+
+    # dadfi3
+    {"fichier": "dadfi3_propre.csv",
+     "key_field":   "Code",
+     "title_field": "TITRE/DOSSIER",
+     "metadata":   ["TITRE/DOSSIER", "CONTENU", "N° PIECES", "DATE",
+                    "OBSERVATIONS", "SORT FINAL", "ANA. DIPLOM.",
+                    "PASSAGE GED", "BASE GED"],
+     "desc_class": "DADFI3"},
+
+    # dadfi4
+    {"fichier": "dadfi4_propre.csv",
+     "key_field":   "Cote",
+     "title_field": "Intitulé",
+     "metadata":   ["Intitulé", "Période début", "Type", "Quantité",
+                    "Fonction", "Code fonction", "Mots-clés",
+                    "Types de documents", "Date ouverture",
+                    "Date clôture", "Système", "Durée conservation",
+                    "Sort final", "Période fin", "Observations"],
+     "desc_class": "DADFI4"},
 ]
 
-def import_csv(source, cursor):
+# ---------------------------------------------------------------------------
+#  FONCTION D’IMPORT
+# ---------------------------------------------------------------------------
+def import_csv(source, cursor) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     with open(source["fichier"], encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile, delimiter=',', quotechar='"')
+
         for row in reader:
-            # 1) Génération d'un archiveId unique
+            # 1. Identifiants
             archive_id = f"maarchRM_{uuid.uuid4().hex}"
-            
-            # 2) Nom d'archive depuis la clé (Référence/Code/Cote)
-            key = row.get(source["key_field"], "").replace("'", "''")[:250]
-            
-            # 3) Construction du texte full-text
+            cote       = row.get(source["key_field"], "").replace("'", "''")[:250]
+            titre      = row.get(source["title_field"], "").replace("'", "''")[:250]
+
+            # 2. Plein-texte & métadonnées
             text_parts = [row.get(f, "") for f in source["metadata"] if row.get(f)]
             text_content = " ".join(text_parts).replace("'", "''")
-            
-            # 4) Préparation du JSON de métadonnées
-            metadata = { f: row.get(f, "") for f in source["metadata"] }
+
+            metadata = {f: row.get(f, "") for f in source["metadata"]}
             metadata_str = json.dumps(metadata, ensure_ascii=False).replace("'", "''")
-            
-            # 5) Valeurs par défaut pour la conservation
-            retention_rule = "GES"
-            retention_duration = "P5Y"
-            final_disposition = "destruction"
-            
+
+            # 3. INSERT
             sql = f"""
 INSERT INTO "recordsManagement"."archive" (
-    "archiveId", "archiveName", "description", "text",
-    "descriptionClass", "originatorOrgRegNumber", "originatorOwnerOrgId",
-    "archiverOrgRegNumber", "archivalProfileReference",
+    "archiveId", "originatorArchiveId", "archiveName",
+    "description", "text",
+    "descriptionClass", "originatorOrgRegNumber",
     "serviceLevelReference", "retentionRuleCode", "retentionDuration",
     "finalDisposition", "depositDate", "status", "fullTextIndexation"
 ) VALUES (
-    '{archive_id}', '{key}', '{metadata_str}', '{text_content}',
-    '{source["desc_class"]}', 'JURRR', 'maarchRM_stdoha-d3ic-osx14l',
-    'maarchRM_stdoha-d3ic-osx14l', 'DOSIP', 'serviceLevel_002',
-    '{retention_rule}', '{retention_duration}', '{final_disposition}',
-    '{now}', 'preserved', 'none'
+    '{archive_id}', '{cote}', '{titre}',
+    '{metadata_str}', '{text_content}',
+    '{source["desc_class"]}', 'GFC',
+    'serviceLevel_002', 'GES', 'P5Y',
+    'destruction', '{now}', 'preserved', 'none'
 );
 """
             cursor.execute(sql)
-            print(f"[{source['fichier']}] importé → {archive_id}")
+            print(f"[{source['fichier']}] → {archive_id}")
 
-def main():
-    conn = psycopg2.connect(client_encoding='utf8', **DB_CONFIG)
-    cur = conn.cursor()
-    for src in CSV_SOURCES:
-        print(f"\n▶ Traitement de {src['fichier']}…")
-        import_csv(src, cur)
-    conn.commit()
-    cur.close()
-    conn.close()
-    print("\n✅ Import terminé pour les 4 jeux de données.")
+# ---------------------------------------------------------------------------
+#  MAIN
+# ---------------------------------------------------------------------------
+def main() -> None:
+    with psycopg2.connect(client_encoding='utf8', **DB_CONFIG) as conn:
+        with conn.cursor() as cur:
+            for src in CSV_SOURCES:
+                print(f"\n▶ Traitement de {src['fichier']}…")
+                import_csv(src, cur)
+            conn.commit()
 
+    print("\n✅ Import terminé pour les 4 jeux DADFI.")
+
+# ---------------------------------------------------------------------------
+#  Lancement
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     main()
+
+# ---------------------------------------------------------------------------
+#  Code signé : Hamiral Redmond – « Write code, get things done. »
+# ---------------------------------------------------------------------------

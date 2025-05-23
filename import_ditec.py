@@ -9,7 +9,7 @@ DB_CONFIG = {
     "dbname": "maarchRM",
     "user": "maarch",
     "password": "maarch",      # À adapter
-    "host": "192.168.1.69",    # À adapter
+    "host": "192.168.71.69",    # À adapter
     "port": "5432"
 }
 
@@ -58,14 +58,12 @@ def import_csv(source, cursor):
             sql = f"""
 INSERT INTO "recordsManagement"."archive" (
     "archiveId", "archiveName", "description", "text",
-    "descriptionClass", "originatorOrgRegNumber", "originatorOwnerOrgId",
-    "archiverOrgRegNumber", "archivalProfileReference",
+    "descriptionClass", "originatorOrgRegNumber", 
     "serviceLevelReference", "retentionRuleCode", "retentionDuration",
     "finalDisposition", "depositDate", "status", "fullTextIndexation"
 ) VALUES (
     '{archive_id}', '{key_val}', '{metadata_str}', '{text_content}',
-    '{source["desc_class"]}', 'JURRR', 'maarchRM_stdoha-d3ic-osx14l',
-    'maarchRM_stdoha-d3ic-osx14l', 'DOSIP', 'serviceLevel_002',
+    '{source["desc_class"]}', 'SPP', 'serviceLevel_002',
     '{retention_rule}', '{retention_duration}', '{final_disposition}',
     '{now}', 'preserved', 'none'
 );

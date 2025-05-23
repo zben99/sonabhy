@@ -10,7 +10,7 @@ DB_CONFIG = {
     "dbname": "maarchRM",
     "user": "maarch",
     "password": "maarch",      # ← À adapter
-    "host": "192.168.1.69",    # ← À adapter si besoin
+    "host": "192.168.71.69",    # ← À adapter si besoin
     "port": "5432"
 }
 
@@ -65,19 +65,14 @@ with open("docperso_propre.csv", encoding="utf-8") as f:
             # 6) Construction de la requête SQL
             sql = f"""
 INSERT INTO "recordsManagement"."archive" (
-    "archiveId", "archiveName", "description", "text",
-    "descriptionClass", "originatorOrgRegNumber", "originatorOwnerOrgId", "originatorOwnerOrgRegNumber",
-    "archiverOrgRegNumber", "archivalProfileReference", "serviceLevelReference",
+    "archiveId", "originatorArchiveId", "archiveName", "description", "text",
+    "descriptionClass", "originatorOrgRegNumber", "serviceLevelReference",
     "retentionRuleCode", "retentionDuration", "finalDisposition",
     "depositDate", "status", "fullTextIndexation"
 ) VALUES (
     '{archive_id}', '{archive_name}', '{metadata_str}', '{text_content}',
     'PERS',             -- classe documentaire « Documents personnels »
-   'JURRR',      -- Org. d’origine
-    'maarchRM_stdoha-d3ic-osx14l',  -- Org propriétaire (maarchRM)
-    'JURRR',      -- Org. propriétaire registre
-    'JURRR',      -- Org. archivage
-    'DOSIP',            -- profil d’archivage
+   'GRH',      -- Org. d’origine
     'serviceLevel_002', -- niveau de service
     '{retention_rule}', '{duration}', '{disposition}',
     '{now}', 'preserved', 'none'

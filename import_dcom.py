@@ -1,42 +1,53 @@
+#!/usr/bin/env python3
+# coding: utf-8
+# ----------------------------------------------------------------------------
+#  Import CSV → Maarch RM (DCOM1 à DCOM4)
+#  Auteur : Hamiral Redmond
+#  Date   : 23 mai 2025
+# ----------------------------------------------------------------------------
 import csv
 import uuid
-from datetime import datetime
-import psycopg2
 import json
+import psycopg2
+from datetime import datetime
 
-# --- Configuration PostgreSQL ---
+# --- Connexion PostgreSQL --------------------------------------------------
 DB_CONFIG = {
-    "dbname": "maarchRM",
-    "user": "maarch",
-    "password": "maarch",      # À adapter
-    "host": "192.168.1.69",    # À adapter
-    "port": "5432"
+    "dbname":   "maarchRM",
+    "user":     "maarch",
+    "password": "maarch",         # ← adapte si besoin
+    "host":     "192.168.71.69",  # ← adapte si besoin
+    "port":     "5432",
 }
 
-# --- Définition des sources CSV ---
+# --- Sources CSV -----------------------------------------------------------
 CSV_SOURCES = [
     {
-        "fichier": "dcom1_propre.csv",
-        "key_field": "ref",
-        "metadata": ["titre", "contenu", "date"],
+        "fichier":    "dcom1_propre.csv",
+        "key_field":  "ref",     # → originatorArchiveId
+        "title_field":"titre",   # → archiveName
+        "metadata":   ["titre", "contenu", "date"],
         "desc_class": "DCOM1"
     },
     {
-        "fichier": "dcom2_propre.csv",
-        "key_field": "ref",
-        "metadata": ["titre", "contenu", "analyse_diplomatique", "date"],
+        "fichier":    "dcom2_propre.csv",
+        "key_field":  "ref",
+        "title_field":"titre",
+        "metadata":   ["titre", "contenu", "analyse_diplomatique", "date"],
         "desc_class": "DCOM2"
     },
     {
-        "fichier": "dcom3_propre.csv",
-        "key_field": "ref",
-        "metadata": ["titre", "contenu", "analyse_diplomatique", "annee"],
+        "fichier":    "dcom3_propre.csv",
+        "key_field":  "ref",
+        "title_field":"titre",
+        "metadata":   ["titre", "contenu", "analyse_diplomatique", "annee"],
         "desc_class": "DCOM3"
     },
     {
-        "fichier": "dcom4_propre.csv",
-        "key_field": "cote_rangement",
-        "metadata": [
+        "fichier":    "dcom4_propre.csv",
+        "key_field":  "cote_rangement",
+        "title_field":"titre",
+        "metadata":   [
             "titre", "dates_extremes", "niveau_description",
             "importance_materielle", "provenance_ou_processus",
             "initial_processus", "mots_cles_matieres",
@@ -45,7 +56,7 @@ CSV_SOURCES = [
             "duree_utilite_admin", "sort_final", "notes"
         ],
         "desc_class": "DCOM4"
-    }
+    },
 ]
 
 def import_csv(source, cursor):
@@ -53,53 +64,50 @@ def import_csv(source, cursor):
     with open(source["fichier"], encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile, delimiter=',', quotechar='"')
         for row in reader:
-            # 1) Génération d'un archiveId unique
+            # 1. Identifiants
             archive_id = f"maarchRM_{uuid.uuid4().hex}"
-            
-            # 2) Nom d'archive depuis la clé (ref ou cote_rangement)
-            key_value = row.get(source["key_field"], "").replace("'", "''")[:250]
-            
-            # 3) Construction du texte pour l'index plein-texte
-            text_parts = [row.get(f, "") for f in source["metadata"] if row.get(f)]
+            cote       = row.get(source["key_field"], "").replace("'", "''")[:250]
+            titre      = row.get(source["title_field"], "").replace("'", "''")[:250]
+
+            # 2. Construction du plein-texte
+            text_parts   = [row.get(f, "") for f in source["metadata"] if row.get(f)]
             text_content = " ".join(text_parts).replace("'", "''")
-            
-            # 4) Préparation du JSON de métadonnées
-            metadata = { f: row.get(f, "") for f in source["metadata"] }
+
+            # 3. Métadonnées JSON
+            metadata     = {f: row.get(f, "") for f in source["metadata"]}
             metadata_str = json.dumps(metadata, ensure_ascii=False).replace("'", "''")
-            
-            # 5) Valeurs par défaut de conservation (à adapter)
-            retention_rule    = "GES"
-            retention_duration= "P5Y"
-            final_disposition = "destruction"
-            
+
+            # 4. INSERT
             sql = f"""
 INSERT INTO "recordsManagement"."archive" (
-    "archiveId", "archiveName", "description", "text",
-    "descriptionClass", "originatorOrgRegNumber", "originatorOwnerOrgId",
-    "archiverOrgRegNumber", "archivalProfileReference",
+    "archiveId", "originatorArchiveId", "archiveName",
+    "description", "text",
+    "descriptionClass", "originatorOrgRegNumber",
     "serviceLevelReference", "retentionRuleCode", "retentionDuration",
     "finalDisposition", "depositDate", "status", "fullTextIndexation"
 ) VALUES (
-    '{archive_id}', '{key_value}', '{metadata_str}', '{text_content}',
-    '{source["desc_class"]}', 'JURRR', 'maarchRM_stdoha-d3ic-osx14l',
-    'maarchRM_stdoha-d3ic-osx14l', 'DOSIP', 'serviceLevel_002',
-    '{retention_rule}', '{retention_duration}', '{final_disposition}',
-    '{now}', 'preserved', 'none'
+    '{archive_id}', '{cote}', '{titre}',
+    '{metadata_str}', '{text_content}',
+    '{source["desc_class"]}', 'APP',
+    'serviceLevel_002', 'GES', 'P5Y',
+    'destruction', '{now}', 'preserved', 'none'
 );
 """
             cursor.execute(sql)
-            print(f"[{source['fichier']}] importé → {archive_id}")
+            print(f"[{source['fichier']}] → {archive_id}")
 
 def main():
-    conn = psycopg2.connect(client_encoding='utf8', **DB_CONFIG)
-    cur  = conn.cursor()
-    for src in CSV_SOURCES:
-        print(f"\n▶ Traitement de {src['fichier']}…")
-        import_csv(src, cur)
-    conn.commit()
-    cur.close()
-    conn.close()
-    print("\n✅ Import terminé pour les 4 bases DCOM.")
+    with psycopg2.connect(client_encoding='utf8', **DB_CONFIG) as conn:
+        with conn.cursor() as cur:
+            for src in CSV_SOURCES:
+                print(f"\n▶ Traitement de {src['fichier']}…")
+                import_csv(src, cur)
+        conn.commit()
+    print("\n✅ Import terminé pour les 4 jeux DCOM.")
 
 if __name__ == "__main__":
     main()
+
+# ----------------------------------------------------------------------------
+#  Code signé : Hamiral Redmond – « Write code, get things done. »
+# ----------------------------------------------------------------------------

@@ -10,7 +10,7 @@ DB_CONFIG = {
     "dbname": "maarchRM",
     "user": "maarch",
     "password": "maarch",  # À adapter
-    "host": "192.168.1.69",
+    "host": "192.168.71.69",
     "port": "5432"
 }
 
@@ -75,33 +75,30 @@ def main():
 
                 insert_query = sql.SQL("""
                     INSERT INTO "recordsManagement"."archive" (
-                      "archiveId", "archiveName", "description", "text",
-                      "descriptionClass", "originatorOrgRegNumber", "originatorOwnerOrgId",
-                      "originatorOwnerOrgRegNumber", "archiverOrgRegNumber",
-                      "archivalProfileReference", "serviceLevelReference",
+                      "archiveId", "originatorArchiveId",  "archiveName", "description", "text",
+                      "descriptionClass", "originatorOrgRegNumber",
+                      "originatorOwnerOrgRegNumber", 
+                     "serviceLevelReference",
                       "retentionRuleCode", "retentionDuration", "finalDisposition",
                       "depositDate", "status", "fullTextIndexation"
                     ) VALUES (
-                      %s, %s, %s, %s,
+                      %s, %s, %s, %s,%s,
                       %s, %s, %s,
                       %s, %s,
                       %s, %s,
-                      %s, %s, %s,
                       %s, %s, %s
                     )
                 """)
 
                 cur.execute(insert_query, [
                     archive_id,
+                    code,
                     titre,
                     json.dumps(metadata, ensure_ascii=False),
                     text_content,
                     'CJ',                                # descriptionClass (à adapter si besoin)
                     'JURRR',                             # originatorOrgRegNumber
-                    'maarchRM_stdoha-d3ic-osx14l',      # originatorOwnerOrgId
                     'JURRR',                             # originatorOwnerOrgRegNumber
-                    'maarchRM_stdoha-d3ic-osx14l',      # archiverOrgRegNumber
-                    'DOSIP',                             # archivalProfileReference
                     'serviceLevel_002',                  # serviceLevelReference
                     retention_rule,
                     duration,
