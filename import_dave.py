@@ -5,16 +5,19 @@ import logging
 from datetime import datetime
 import psycopg2
 
-# --- Configuration PostgreSQL --- 
+# --- Configuration PostgreSQL ---
 DB_CONFIG = {
     "dbname": "maarchRM",
     "user": "maarch",
-    "password": "maarch",   # À adapter
-    "host": "192.168.1.69", # À adapter si besoin
+    "password": "maarch",       # À adapter
+    "host": "192.168.39.69",     # À adapter
     "port": "5432"
 }
 
-# --- Setup du logger pour les erreurs d’import ---
+# --- Organisation productrice ---
+ORG_CODE = "AUDDD"  # ← Adapter si besoin
+
+# --- Logger pour erreurs d’import ---
 logging.basicConfig(
     filename='dave_import_errors.log',
     level=logging.ERROR,
@@ -30,21 +33,21 @@ with open("dave_propre.csv", encoding="utf-8") as csvfile:
     reader = csv.DictReader(csvfile, delimiter=',', quotechar='"')
     for lineno, row in enumerate(reader, start=2):
         try:
-            # Génération d’un ID unique
-            archive_id = f"maarchRM_{uuid.uuid4().hex[:6]}-{uuid.uuid4().hex[:4]}-{uuid.uuid4().hex[:6]}"
+            # 1) Identifiant unique
+            archive_id = f"{ORG_CODE}_{uuid.uuid4().hex[:6]}"
 
-            # Extraction et nettoyage des champs
-            cote         = row.get("cote", "").replace("'", "''")[:50]
-            auteur       = row.get("auteur", "").replace("'", "''")[:250]
-            titre        = row.get("titre", "").replace("'", "''")[:250]
-            adresse      = row.get("adresse", "").replace("'", "''")
-            descr_tech   = row.get("description_tech", "").replace("'", "''")
-            descr_mat    = row.get("descrip_matiere", "").replace("'", "''")
+            # 2) Extraction des champs
+            cote       = row.get("cote", "").replace("'", "''")[:100]
+            auteur     = row.get("auteur", "").replace("'", "''")[:250]
+            titre      = row.get("titre", "").replace("'", "''")[:250]
+            adresse    = row.get("adresse", "").replace("'", "''")
+            descr_tech = row.get("description_tech", "").replace("'", "''")
+            descr_mat  = row.get("descrip_matiere", "").replace("'", "''")
 
-            # Texte complet pour indexation
+            # 3) Texte indexé
             text_content = f"{cote} {auteur} {titre} {adresse} {descr_tech} {descr_mat}".replace("'", "''")
 
-            # Métadonnées JSON
+            # 4) Métadonnées JSON
             metadata = {
                 "COTE": cote,
                 "AUTEUR": auteur,
@@ -53,38 +56,30 @@ with open("dave_propre.csv", encoding="utf-8") as csvfile:
                 "DESCRIPTION_TECH": descr_tech,
                 "DESCRIP_MATIERE": descr_mat
             }
-            metadata_str = json.dumps(metadata).replace("'", "''")
+            metadata_str = json.dumps(metadata, ensure_ascii=False).replace("'", "''")
 
-            # Détection du profil audiovisuel
+            # 5) Règle de conservation selon support
             dt_lower = descr_tech.lower()
             if any(x in dt_lower for x in ["dvd", "cd-rom", "disquette", "cassette"]):
                 retention_rule = "AUD"
-                duration       = "P10Y"
-                disposition    = "destruction"
+                duration = "P10Y"
             else:
                 retention_rule = "AUD"
-                duration       = "P5Y"
-                disposition    = "destruction"
+                duration = "P5Y"
+            disposition = "destruction"
 
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            # Construction de la requête
+            # 6) Requête SQL complète
             sql = f"""
 INSERT INTO "recordsManagement"."archive" (
-    "archiveId", "archiveName", "description", "text",
-    "descriptionClass", "originatorOrgRegNumber", "originatorOwnerOrgId", "originatorOwnerOrgRegNumber",
-    "archiverOrgRegNumber", "archivalProfileReference", "serviceLevelReference",
+    "archiveId", "originatorArchiveId", "archiveName", "description", "text",
+    "descriptionClass", "originatorOrgRegNumber", "originatorOwnerOrgId", "serviceLevelReference",
     "retentionRuleCode", "retentionDuration", "finalDisposition",
     "depositDate", "status", "fullTextIndexation"
 ) VALUES (
-    '{archive_id}', '{titre}', '{metadata_str}', '{text_content}',
-    'CJ',        -- Classe documentaire audiovisuelle
-    'JURRR',      -- Org. d’origine
-    'maarchRM_stdoha-d3ic-osx14l',  -- Org propriétaire (maarchRM)
-    'JURRR',      -- Org. propriétaire registre
-    'JURRR',      -- Org. archivage
-    'DOSIP',      -- Profil d’archivage
-    'serviceLevel_002',
+    '{archive_id}', '{cote}', '{titre}', '{metadata_str}', '{text_content}',
+    'CJ', '{ORG_CODE}', '{ORG_CODE}', 'serviceLevel_002',
     '{retention_rule}', '{duration}', '{disposition}',
     '{now}', 'preserved', 'none'
 );
@@ -92,7 +87,6 @@ INSERT INTO "recordsManagement"."archive" (
             cur.execute(sql)
 
         except Exception as e:
-            # En cas d’erreur, on log l’exception et la ligne du CSV
             logging.error(f"Erreur ligne CSV {lineno}: {e}", exc_info=True)
 
 # --- Commit & fermeture ---
@@ -100,4 +94,4 @@ conn.commit()
 cur.close()
 conn.close()
 
-print("Importation terminée (voir dave_import_errors.log pour les erreurs).")
+print("✅ Importation DAVE terminée (voir dave_import_errors.log pour les erreurs).")
